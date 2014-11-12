@@ -499,6 +499,7 @@ func (kl *Kubelet) runContainer(pod *api.BoundPod, container *api.Container, pod
 	} else {
 		// Remember this reference so we can report events about this container
 		kl.setRef(dockertools.DockerID(dockerContainer.ID), ref)
+		glog.Infof("????? STARTED WITH CONTAINER")
 		record.Eventf(ref, "running", "started", "Started with docker id %v", dockerContainer.ID)
 	}
 
