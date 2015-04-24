@@ -1,0 +1,73 @@
+#cloud-config
+
+coreos:
+  units:
+    - name: kube-env.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Configuration Fetcher
+        Requires=network-online.target
+        After=network-online.target
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/curl --fail --silent --show-error \
+        -H "X-Google-Metadata-Request: True" \
+        -o /etc/kube-env \
+        http://metadata.google.internal/computeMetadata/v1/instance/attributes/kube-env 
+
+    - name: kubernetes-install-master.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Installer Scripts
+        Requires=network-online.target
+        After=network-online.target
+        Requires=kube-env.service
+        After=kube-env.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        EnvironmentFile=/etc/kube-env
+        ExecStartPre=/usr/bin/mkdir -p /opt/kubernetes/pkg
+        ExecStartPre=/usr/bin/curl --location --create-dirs --output /opt/kubernetes/pkg/kubernetes-server-linux-amd64.tar.gz ${SERVER_BINARY_TAR_URL}
+        ExecStart=/usr/bin/tar xf /opt/kubernetes/pkg/kubernetes-server-linux-amd64.tar.gz -C /opt --overwrite
+
+    # TODO: This is totally hacky. salt tarball is required for generate cert and master components
+    # manifest
+    - name: kube-install-salt.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Salt Based Configuration Fetcher
+        Requires=network-online.target
+        After=network-online.target
+        Requires=kube-env.service
+        After=kube-env.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        EnvironmentFile=/etc/kube-env
+        ExecStartPre=/usr/bin/mkdir -p /opt/kubernetes/salt
+        ExecStartPre=/usr/bin/curl --location --create-dirs --output /opt/kubernetes/salt/kubernetes-salt.tar.gz ${SALT_TAR_URL}
+        ExecStart=/usr/bin/tar xf /opt/kubernetes/salt/kubernetes-salt.tar.gz -C /opt --overwrite
+
+    - name: kube-install-cert.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Cert Installer
+        Requires=network-online.target
+        After=network-online.target
+        Requires=kube-env.service
+        After=kube-env.service
+        Requires=kube-install-salt.service
+        After=kube-install-salt.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        EnvironmentFile=/etc/kube-env
+        ExecStartPre=/sbin/groupadd kube-cert
+        ExecStart=/opt/kubernetes/saltbase/salt/generate-cert/make-ca-cert.sh _use_gce_external_ip_ --overwrite
+

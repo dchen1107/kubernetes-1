@@ -21,6 +21,7 @@
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/../..
 source "${KUBE_ROOT}/cluster/gce/${KUBE_CONFIG_FILE-"config-default.sh"}"
 source "${KUBE_ROOT}/cluster/common.sh"
+source "${KUBE_ROOT}/cluster/gce/rkt/util.sh"
 
 NODE_INSTANCE_PREFIX="${INSTANCE_PREFIX}-minion"
 
@@ -449,12 +450,20 @@ function yaml-quote {
 }
 
 # $1: if 'true', we're building a master yaml, else a node
+# $3: if 'true', we're building a yaml for debian image, else for coreos
 function build-kube-env {
   local master=$1
   local file=$2
 
+  if [[ "$3" == "true" ]]; then
+      sign=": "
+  else
+      sign="="
+  fi
+
   rm -f ${file}
   cat >$file <<EOF
+<<<<<<< HEAD
 ENV_TIMESTAMP: $(yaml-quote $(date -u +%Y-%m-%dT%T%z))
 INSTANCE_PREFIX: $(yaml-quote ${INSTANCE_PREFIX})
 NODE_INSTANCE_PREFIX: $(yaml-quote ${NODE_INSTANCE_PREFIX})
@@ -475,24 +484,47 @@ KUBE_BEARER_TOKEN: $(yaml-quote ${KUBE_BEARER_TOKEN})
 KUBELET_TOKEN: $(yaml-quote ${KUBELET_TOKEN:-})
 ADMISSION_CONTROL: $(yaml-quote ${ADMISSION_CONTROL:-})
 MASTER_IP_RANGE: $(yaml-quote ${MASTER_IP_RANGE})
+=======
+ENV_TIMESTAMP${sign}$(yaml-quote $(date -u +%Y-%m-%dT%T%z))
+INSTANCE_PREFIX${sign}$(yaml-quote ${INSTANCE_PREFIX})
+NODE_INSTANCE_PREFIX${sign}$(yaml-quote ${NODE_INSTANCE_PREFIX})
+SERVER_BINARY_TAR_URL${sign}$(yaml-quote ${SERVER_BINARY_TAR_URL})
+SALT_TAR_URL${sign}$(yaml-quote ${SALT_TAR_URL})
+PORTAL_NET${sign}$(yaml-quote ${PORTAL_NET})
+ENABLE_CLUSTER_MONITORING${sign}$(yaml-quote ${ENABLE_CLUSTER_MONITORING:-false})
+ENABLE_NODE_MONITORING${sign}$(yaml-quote ${ENABLE_NODE_MONITORING:-false})
+ENABLE_CLUSTER_LOGGING${sign}$(yaml-quote ${ENABLE_CLUSTER_LOGGING:-false})
+ENABLE_NODE_LOGGING${sign}$(yaml-quote ${ENABLE_NODE_LOGGING:-false})
+LOGGING_DESTINATION${sign}$(yaml-quote ${LOGGING_DESTINATION:-})
+ELASTICSEARCH_LOGGING_REPLICAS${sign}$(yaml-quote ${ELASTICSEARCH_LOGGING_REPLICAS:-})
+ENABLE_CLUSTER_DNS${sign}$(yaml-quote ${ENABLE_CLUSTER_DNS:-false})
+DNS_REPLICAS${sign}$(yaml-quote ${DNS_REPLICAS:-})
+DNS_SERVER_IP${sign}$(yaml-quote ${DNS_SERVER_IP:-})
+DNS_DOMAIN${sign}$(yaml-quote ${DNS_DOMAIN:-})
+KUBE_BEARER_TOKEN${sign}$(yaml-quote ${KUBE_BEARER_TOKEN})
+ADMISSION_CONTROL${sign}$(yaml-quote ${ADMISSION_CONTROL:-})
+MASTER_IP_RANGE${sign}$(yaml-quote ${MASTER_IP_RANGE})
+>>>>>>> Rkt support deployment
 EOF
 
   if [[ "${master}" != "true" ]]; then
     cat >>$file <<EOF
-KUBERNETES_MASTER_NAME: $(yaml-quote ${MASTER_NAME})
-ZONE: $(yaml-quote ${ZONE})
-EXTRA_DOCKER_OPTS: $(yaml-quote ${EXTRA_DOCKER_OPTS})
-ENABLE_DOCKER_REGISTRY_CACHE: $(yaml-quote ${ENABLE_DOCKER_REGISTRY_CACHE:-false})
+KUBERNETES_MASTER_NAME${sign}$(yaml-quote ${MASTER_NAME})
+ZONE${sign}$(yaml-quote ${ZONE})
+EXTRA_DOCKER_OPTS${sign}$(yaml-quote ${EXTRA_DOCKER_OPTS})
+ENABLE_DOCKER_REGISTRY_CACHE${sign}$(yaml-quote ${ENABLE_DOCKER_REGISTRY_CACHE:-false})
 EOF
   fi
 }
 
 function write-master-env {
-  build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml"
+  build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml" ${USE_DOCKER_RUNTIME}
+  cat ${KUBE_TEMP}/master-kube-env.yaml
 }
 
 function write-node-env {
-  build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml"
+  build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml" ${USE_DOCKER_RUNTIME}
+  cat ${KUBE_TEMP}/node-kube-env.yaml
 }
 
 # create-master-instance creates the master instance. If called with
@@ -527,6 +559,7 @@ function create-master-instance {
     --metadata-from-file \
       "startup-script=${KUBE_ROOT}/cluster/gce/configure-vm.sh" \
       "kube-env=${KUBE_TEMP}/master-kube-env.yaml" \
+      "user-data=${KUBE_ROOT}/cluster/gce/rkt/master.yaml" \
     --disk name="${MASTER_NAME}-pd" device-name=master-pd mode=rw boot=no auto-delete=no
 }
 
@@ -613,6 +646,12 @@ function kube-up {
 
   # Wait for last batch of jobs
   wait-for-jobs
+<<<<<<< HEAD
+=======
+  # TODO(dawnchen): ????BEGINING Diff
+  # TODO(dawnchen): ????figure out whether we need and how to copy credentials over
+  add-instance-metadata "${MASTER_NAME}" "kube-token=${KUBELET_TOKEN}"
+>>>>>>> Rkt support deployment
 
   echo "Creating minions."
 

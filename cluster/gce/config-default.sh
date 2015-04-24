@@ -20,14 +20,14 @@ GCLOUD=gcloud
 ZONE=${KUBE_GCE_ZONE:-us-central1-b}
 MASTER_SIZE=${MASTER_SIZE:-n1-standard-1}
 MINION_SIZE=${MINION_SIZE:-n1-standard-1}
-NUM_MINIONS=${NUM_MINIONS:-4}
+NUM_MINIONS=${NUM_MINIONS:-1}
 MINION_DISK_TYPE=pd-standard
 MINION_DISK_SIZE=${MINION_DISK_SIZE:-100GB}
 # TODO(dchen1107): Filed an internal issue to create an alias
 # for containervm image, so that gcloud will expand this
 # to the latest supported image.
-IMAGE=container-vm-v20150317
-IMAGE_PROJECT=google-containers
+IMAGE=coreos-stable-633-1-0-v20150414
+IMAGE_PROJECT=coreos-cloud
 NETWORK=${KUBE_GCE_NETWORK:-default}
 INSTANCE_PREFIX="${KUBE_GCE_INSTANCE_PREFIX:-kubernetes}"
 MASTER_NAME="${INSTANCE_PREFIX}-master"
@@ -109,3 +109,6 @@ DNS_REPLICAS=1
 
 # Admission Controllers to invoke prior to persisting objects in cluster
 ADMISSION_CONTROL=NamespaceLifecycle,NamespaceAutoProvision,LimitRanger,ResourceQuota
+
+#???? Introduce for Rocket support
+USE_DOCKER_RUNTIME=false
