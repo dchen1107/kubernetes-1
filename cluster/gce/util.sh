@@ -463,28 +463,6 @@ function build-kube-env {
 
   rm -f ${file}
   cat >$file <<EOF
-<<<<<<< HEAD
-ENV_TIMESTAMP: $(yaml-quote $(date -u +%Y-%m-%dT%T%z))
-INSTANCE_PREFIX: $(yaml-quote ${INSTANCE_PREFIX})
-NODE_INSTANCE_PREFIX: $(yaml-quote ${NODE_INSTANCE_PREFIX})
-SERVER_BINARY_TAR_URL: $(yaml-quote ${SERVER_BINARY_TAR_URL})
-SALT_TAR_URL: $(yaml-quote ${SALT_TAR_URL})
-PORTAL_NET: $(yaml-quote ${PORTAL_NET})
-ENABLE_CLUSTER_MONITORING: $(yaml-quote ${ENABLE_CLUSTER_MONITORING:-false})
-ENABLE_NODE_MONITORING: $(yaml-quote ${ENABLE_NODE_MONITORING:-false})
-ENABLE_CLUSTER_LOGGING: $(yaml-quote ${ENABLE_CLUSTER_LOGGING:-false})
-ENABLE_NODE_LOGGING: $(yaml-quote ${ENABLE_NODE_LOGGING:-false})
-LOGGING_DESTINATION: $(yaml-quote ${LOGGING_DESTINATION:-})
-ELASTICSEARCH_LOGGING_REPLICAS: $(yaml-quote ${ELASTICSEARCH_LOGGING_REPLICAS:-})
-ENABLE_CLUSTER_DNS: $(yaml-quote ${ENABLE_CLUSTER_DNS:-false})
-DNS_REPLICAS: $(yaml-quote ${DNS_REPLICAS:-})
-DNS_SERVER_IP: $(yaml-quote ${DNS_SERVER_IP:-})
-DNS_DOMAIN: $(yaml-quote ${DNS_DOMAIN:-})
-KUBE_BEARER_TOKEN: $(yaml-quote ${KUBE_BEARER_TOKEN})
-KUBELET_TOKEN: $(yaml-quote ${KUBELET_TOKEN:-})
-ADMISSION_CONTROL: $(yaml-quote ${ADMISSION_CONTROL:-})
-MASTER_IP_RANGE: $(yaml-quote ${MASTER_IP_RANGE})
-=======
 ENV_TIMESTAMP${sign}$(yaml-quote $(date -u +%Y-%m-%dT%T%z))
 INSTANCE_PREFIX${sign}$(yaml-quote ${INSTANCE_PREFIX})
 NODE_INSTANCE_PREFIX${sign}$(yaml-quote ${NODE_INSTANCE_PREFIX})
@@ -502,10 +480,9 @@ DNS_REPLICAS${sign}$(yaml-quote ${DNS_REPLICAS:-})
 DNS_SERVER_IP${sign}$(yaml-quote ${DNS_SERVER_IP:-})
 DNS_DOMAIN${sign}$(yaml-quote ${DNS_DOMAIN:-})
 KUBE_BEARER_TOKEN${sign}$(yaml-quote ${KUBE_BEARER_TOKEN})
+KUBELET_TOKEN${sign}$(yaml-quote ${KUBELET_TOKEN:-})
 ADMISSION_CONTROL${sign}$(yaml-quote ${ADMISSION_CONTROL:-})
 MASTER_IP_RANGE${sign}$(yaml-quote ${MASTER_IP_RANGE})
->>>>>>> Rkt support deployment
-EOF
 
   if [[ "${master}" != "true" ]]; then
     cat >>$file <<EOF
@@ -518,7 +495,7 @@ EOF
 }
 
 function write-master-env {
-  build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml" ${USE_DOCKER_RUNTIME}
+  build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml" true
   cat ${KUBE_TEMP}/master-kube-env.yaml
 }
 
@@ -550,8 +527,8 @@ function create-master-instance {
     --project "${PROJECT}" \
     --zone "${ZONE}" \
     --machine-type "${MASTER_SIZE}" \
-    --image-project="${IMAGE_PROJECT}" \
-    --image "${IMAGE}" \
+    --image-project=google-containers \
+    --image container-vm-v20150317 \
     --tags "${MASTER_TAG}" \
     --network "${NETWORK}" \
     --scopes "storage-ro" "compute-rw" \
@@ -559,7 +536,6 @@ function create-master-instance {
     --metadata-from-file \
       "startup-script=${KUBE_ROOT}/cluster/gce/configure-vm.sh" \
       "kube-env=${KUBE_TEMP}/master-kube-env.yaml" \
-      "user-data=${KUBE_ROOT}/cluster/gce/rkt/master.yaml" \
     --disk name="${MASTER_NAME}-pd" device-name=master-pd mode=rw boot=no auto-delete=no
 }
 
@@ -646,12 +622,10 @@ function kube-up {
 
   # Wait for last batch of jobs
   wait-for-jobs
-<<<<<<< HEAD
-=======
+
   # TODO(dawnchen): ????BEGINING Diff
   # TODO(dawnchen): ????figure out whether we need and how to copy credentials over
   add-instance-metadata "${MASTER_NAME}" "kube-token=${KUBELET_TOKEN}"
->>>>>>> Rkt support deployment
 
   echo "Creating minions."
 
@@ -663,9 +637,19 @@ function kube-up {
   fi
 
   write-node-env
+
+  # TODO(dawnchen):
+  #create-node-template "${NODE_INSTANCE_PREFIX}-template" "${scope_flags[*]}" \
+  #  "startup-script=${KUBE_ROOT}/cluster/gce/configure-vm.sh" \
+  #  "user-data=${KUBE_ROOT}/cluster/gce/rkt/node.yaml" \
+  #  "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
+  #  "kube-token=${KUBELET_TOKEN}"
+
   create-node-template "${NODE_INSTANCE_PREFIX}-template" "${scope_flags[*]}" \
+    "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
+    "user-data=${KUBE_ROOT}/cluster/gce/rkt/node.yaml" \
     "startup-script=${KUBE_ROOT}/cluster/gce/configure-vm.sh" \
-    "kube-env=${KUBE_TEMP}/node-kube-env.yaml"
+    "kube-token=${KUBELET_TOKEN}"
 
   gcloud preview managed-instance-groups --zone "${ZONE}" \
       create "${NODE_INSTANCE_PREFIX}-group" \

@@ -6,7 +6,7 @@ coreos:
       command: start
       content: |
         [Unit]
-        Description=Kubernetes Configuration Fetcher
+        Description=Fetch kubernetes-node-environment
         Requires=network-online.target
         After=network-online.target
         [Service]
@@ -15,13 +15,29 @@ coreos:
         ExecStart=/usr/bin/curl --fail --silent --show-error \
         -H "X-Google-Metadata-Request: True" \
         -o /etc/kube-env \
-        http://metadata.google.internal/computeMetadata/v1/instance/attributes/kube-env 
+        http://metadata.google.internal/computeMetadata/v1/instance/attributes/kube-env
 
-    - name: kubernetes-install-master.service
+    - name: kubernetes-install-rkt.service
       command: start
       content: |
         [Unit]
-        Description=Kubernetes Installer Scripts
+        Description=Fetch Rocket
+        Documentation=http://github.com/coreos/rkt
+        Requires=network-online.target
+        After=network-online.target
+        [Service]
+        EnvironmentFile=/etc/kube-env
+        ExecStartPre=/usr/bin/mkdir -p /opt/rkt
+        ExecStartPre=/usr/bin/wget \
+        -O /opt/rkt/rkt-v0.5.4.tar.gz \
+        https://github.com/coreos/rkt/releases/download/v0.5.4/rkt-v0.5.4.tar.gz
+        ExecStart=/usr/bin/tar xzvf /opt/rkt/rkt-v0.5.4.tar.gz -C /opt --overwrite
+        
+    - name: kubernetes-install-minion.service
+      command: start
+      content: |
+        [Unit]
+        Description=Install Kubernetes Server
         Requires=network-online.target
         After=network-online.target
         Requires=kube-env.service
@@ -53,8 +69,6 @@ coreos:
         ExecStartPre=/usr/bin/curl --location --create-dirs --output /opt/kubernetes/salt/kubernetes-salt.tar.gz ${SALT_TAR_URL}
         ExecStart=/usr/bin/tar xf /opt/kubernetes/salt/kubernetes-salt.tar.gz -C /opt --overwrite
 
-    # TODO(dawnchen): ????? Add service to mount master-pd
-
     - name: kube-install-cert.service
       command: start
       content: |
@@ -73,3 +87,38 @@ coreos:
         ExecStartPre=/sbin/groupadd kube-cert
         ExecStart=/opt/kubernetes/saltbase/salt/generate-cert/make-ca-cert.sh _use_gce_external_ip_ --overwrite
 
+    - name: kubelet.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubelet
+        Requires=kubernetes-install-minion.service
+        After=kubernetes-install-minion.service
+        Requires=kubernetes-install-rkt.service
+        After=kubernetes-install-rkt.service
+        [Service]
+        EnvironmentFile=/etc/kube-env
+        ExecStart=/opt/kubernetes/server/bin/kubelet \
+        --api_servers=https://kubernetes-master.c.golden-system-455.internal \
+        --config=/etc/kubernetes/manifests \
+        --allow_privileged=False \
+        --v=2 \
+        --cluster_dns=10.0.0.10 \
+        --cluster_domain=kubernetes.local \
+        --logtostderr=true
+
+    - name: kube-proxy.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kube-proxy
+        Requires=kubernetes-install-minion.service
+        After=kubernetes-install-minion.service
+        Requires=kubernetes-install-rkt.service
+        After=kubernetes-install-rkt.service
+        [Service]
+        EnvironmentFile=/etc/kube-env
+        ExecStart=/opt/kubernetes/server/bin/kube-proxy \
+        --master=http://kubernetes-master.c.golden-system-455.internal:7080 \
+        --v=2 \
+        --logtostderr=true
