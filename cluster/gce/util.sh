@@ -483,6 +483,7 @@ KUBE_BEARER_TOKEN${sign}$(yaml-quote ${KUBE_BEARER_TOKEN})
 KUBELET_TOKEN${sign}$(yaml-quote ${KUBELET_TOKEN:-})
 ADMISSION_CONTROL${sign}$(yaml-quote ${ADMISSION_CONTROL:-})
 MASTER_IP_RANGE${sign}$(yaml-quote ${MASTER_IP_RANGE})
+EOF
 
   if [[ "${master}" != "true" ]]; then
     cat >>$file <<EOF
