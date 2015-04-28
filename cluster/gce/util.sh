@@ -491,6 +491,7 @@ KUBERNETES_MASTER_NAME${sign}$(yaml-quote ${MASTER_NAME})
 ZONE${sign}$(yaml-quote ${ZONE})
 EXTRA_DOCKER_OPTS${sign}$(yaml-quote ${EXTRA_DOCKER_OPTS})
 ENABLE_DOCKER_REGISTRY_CACHE${sign}$(yaml-quote ${ENABLE_DOCKER_REGISTRY_CACHE:-false})
+PROJECT_ID${sign}$(yaml-quote ${PROJECT})
 EOF
   fi
 }
@@ -668,6 +669,7 @@ function kube-up {
   for (( i=0; i<${#MINION_NAMES[@]}; i++)); do
     create-route "${MINION_NAMES[$i]}" "${MINION_IP_RANGES[$i]}" &
     add-instance-metadata "${MINION_NAMES[$i]}" "node-ip-range=${MINION_IP_RANGES[$i]}" &
+    add-instance-metadata "${MINION_NAMES[$i]}" "node-name=${MINION_NAMES[$i]}" &
 
     if [ $i -ne 0 ] && [ $((i%5)) -eq 0 ]; then
       echo Waiting for a batch of routes at $i...

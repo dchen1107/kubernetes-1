@@ -1,5 +1,16 @@
 #cloud-config
 
+write_files:
+  - path: /run/setup-auth.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash -e
+
+      source /etc/kube-env
+
+      /usr/bin/mkdir -p /var/lib/kubelet
+      /bin/echo  {\"BearerToken\": \"${KUBE_BEARER_TOKEN}\", \"Insecure\": true } > /var/lib/kubelet/kubernetes_auth
+
 coreos:
   units:
     - name: kube-env.service
@@ -31,7 +42,8 @@ coreos:
         ExecStartPre=/usr/bin/wget \
         -O /opt/rkt/rkt-v0.5.4.tar.gz \
         https://github.com/coreos/rkt/releases/download/v0.5.4/rkt-v0.5.4.tar.gz
-        ExecStart=/usr/bin/tar xzvf /opt/rkt/rkt-v0.5.4.tar.gz -C /opt --overwrite
+        ExecStartPre=/usr/bin/tar xzvf /opt/rkt/rkt-v0.5.4.tar.gz -C /opt --overwrite
+        ExecStart=/bin/systemd-run rkt metadata-service
         
     - name: kubernetes-install-minion.service
       command: start
@@ -50,56 +62,41 @@ coreos:
         ExecStartPre=/usr/bin/curl --location --create-dirs --output /opt/kubernetes/pkg/kubernetes-server-linux-amd64.tar.gz ${SERVER_BINARY_TAR_URL}
         ExecStart=/usr/bin/tar xf /opt/kubernetes/pkg/kubernetes-server-linux-amd64.tar.gz -C /opt --overwrite
 
-    # TODO: This is totally hacky. salt tarball is required for generate cert and master components
-    # manifest
-    - name: kube-install-salt.service
+    # for cluster/validate_cluster.sh
+    # node-ip-range for network configuration
+    - name: kubelet-preparation.service
       command: start
       content: |
         [Unit]
-        Description=Kubernetes Salt Based Configuration Fetcher
-        Requires=network-online.target
-        After=network-online.target
-        Requires=kube-env.service
-        After=kube-env.service
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        EnvironmentFile=/etc/kube-env
-        ExecStartPre=/usr/bin/mkdir -p /opt/kubernetes/salt
-        ExecStartPre=/usr/bin/curl --location --create-dirs --output /opt/kubernetes/salt/kubernetes-salt.tar.gz ${SALT_TAR_URL}
-        ExecStart=/usr/bin/tar xf /opt/kubernetes/salt/kubernetes-salt.tar.gz -C /opt --overwrite
-
-    - name: kube-install-cert.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes Cert Installer
-        Requires=network-online.target
-        After=network-online.target
-        Requires=kube-env.service
-        After=kube-env.service
-        Requires=kube-install-salt.service
-        After=kube-install-salt.service
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        EnvironmentFile=/etc/kube-env
-        ExecStartPre=/sbin/groupadd kube-cert
-        ExecStart=/opt/kubernetes/saltbase/salt/generate-cert/make-ca-cert.sh _use_gce_external_ip_ --overwrite
-
-    - name: kubelet.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubelet
+        Description=Configure Node For Kubelet service
         Requires=kubernetes-install-minion.service
         After=kubernetes-install-minion.service
         Requires=kubernetes-install-rkt.service
         After=kubernetes-install-rkt.service
         [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        EnvironmentFile=/etc/kube-env
+        # TODO(dawnchen): Push this to separate write-files
+        ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+        ExecStartPre=/usr/bin/curl --fail --silent --show-error \
+        -H "X-Google-Metadata-Request: True" \
+        -o /proc/sys/kernel/hostname \
+        http://metadata.google.internal/computeMetadata/v1/instance/attributes/node-name
+        ExecStart=/run/setup-auth.sh
+
+    - name: kubelet.service
+      command: start
+      content: |
+        [Unit]
+        Description=Run Kubelet service
+        Requires=kubelet-preparation.service
+        After=kubelet-preparation.service
+        ConditionFileNotEmpty=/var/lib/kubelet/kubernetes_auth
+        [Service]
         EnvironmentFile=/etc/kube-env
         ExecStart=/opt/kubernetes/server/bin/kubelet \
-        --api_servers=https://kubernetes-master.c.golden-system-455.internal \
+        --api_servers=https://kubernetes-master.c.${PROJECT_ID}.internal \
         --config=/etc/kubernetes/manifests \
         --allow_privileged=False \
         --v=2 \
@@ -111,7 +108,7 @@ coreos:
       command: start
       content: |
         [Unit]
-        Description=Kube-proxy
+        Description=Start Kube-proxy service as Daemon
         Requires=kubernetes-install-minion.service
         After=kubernetes-install-minion.service
         Requires=kubernetes-install-rkt.service
@@ -119,6 +116,6 @@ coreos:
         [Service]
         EnvironmentFile=/etc/kube-env
         ExecStart=/opt/kubernetes/server/bin/kube-proxy \
-        --master=http://kubernetes-master.c.golden-system-455.internal:7080 \
+        --master=http://kubernetes-master.c.${PROJECT_ID}.internal:7080 \
         --v=2 \
         --logtostderr=true
