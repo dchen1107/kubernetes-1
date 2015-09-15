@@ -88,44 +88,31 @@ net.ipv4.ip_forward:
 #    http://apt.dockerproject.org/repo/pool/main/d/docker-engine
 # 2. Download based on that:
 #    curl -O http://apt.dockerproject.org/repo/pool/main/d/docker-engine/<deb>
-# 3. Upload to GCS:
-#    gsutil cp <deb> gs://kubernetes-release/docker/<deb>
-# 4. Make it world readable:
-#    gsutil acl ch -R -g all:R gs://kubernetes-release/docker/<deb>
-# 5. Get a hash of the deb:
-#    shasum <deb>
-# 6. Update override_deb, override_deb_sha1, override_docker_ver with new
-#    deb name, new hash and new version
+# 3. Update override_deb, override_docker_ver with new deb name, and new version
 
 {% set storage_base='https://storage.googleapis.com/kubernetes-release/docker/' %}
-
 # Only upgrade Docker to 1.8.2 for the containerVM image.
 # TODO(dchen1107): For release 1.1, we want to update the ContainerVM image to
 # include Docker 1.8.2 and comment out the upgrade below.
-{% if grains.get('cloud', '') == 'gce'
-   and grains.get('os_family', '') == 'Debian'
-   and grains.get('oscodename', '') == 'wheezy' -%}
+{% if grains.get('oscodename') != '' %}
 {% set docker_pkg_name='docker-engine' %}
-{% set override_deb='docker-engine_1.8.2-0~wheezy_amd64.deb' %}
-{% set override_deb_sha1='dcff80bffcbde458508da58d2a9fe7bef8eed404' %}
-{% set override_docker_ver='1.8.2-0~wheezy' %}
-{% else %}
-{% set docker_pkg_name='lxc-docker-1.7.1' %}
-{% set override_docker_ver='1.7.1' %}
-{% set override_deb='lxc-docker-1.7.1_1.7.1_amd64.deb' %}
-{% set override_deb_sha1='81abef31dd2c616883a61f85bfb294d743b1c889' %}
+{% set override_deb='docker-engine_1.8.2-0~' + grains.oscodename+'_amd64.deb' %}
+{% set override_docker_ver='1.8.2-0' %}
 {% endif %}
 
 {% if override_docker_ver != '' %}
+
 purge-old-docker-package:
   pkg.removed:
     - pkgs:
       - lxc-docker-1.6.2
+      - lxc-docker-1.7.1
 
+# Download from docker site
 /var/cache/docker-install/{{ override_deb }}:
   file.managed:
-    - source: {{ storage_base }}{{ override_deb }}
-    - source_hash: sha1={{ override_deb_sha1 }}
+    - source: http://apt.dockerproject.org/repo/pool/main/d/docker-engine/{{ override_deb }}
+    - source_hash: md5=https://get.docker.com/builds/Linux/i386/docker-1.8.2.md5
     - user: root
     - group: root
     - mode: 644
