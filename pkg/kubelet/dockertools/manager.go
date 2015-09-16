@@ -1418,6 +1418,19 @@ func (dm *DockerManager) runContainerInPod(pod *api.Pod, container *api.Containe
 	}
 	id, err := dm.runContainer(pod, container, opts, ref, netMode, ipcMode, utsMode, pidMode)
 	if err != nil {
+		// Check return error against ErrNoSuchImage, and assume the image is corrupted.
+		// In this case, remove corrupted image, and wait for next syncPod loop to repull.
+		// ???? include open issue
+		if err == docker.ErrNoSuchImage {
+			dm.recorder.Eventf(ref, "Backoff", "Back-off restarting failed docker container")
+			dm.client.RemoveImage(container.Image)
+			/* ????? need to update status with ImageCorrupted, and re-pulling
+			containerStatus.State.Waiting = &api.ContainerStateWaiting{
+				Message: fmt.Sprintf("Image: %s is not ready on the node", image),
+				Reason:  "ImageNotReady",
+			}*/
+		}
+
 		return "", err
 	}
 
