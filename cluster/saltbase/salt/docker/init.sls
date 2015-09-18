@@ -98,14 +98,12 @@ purge-old-docker-package:
       - lxc-docker-1.7.1
 
 # Download from docker site
-/var/cache/docker-install/docker-{{ override_docker_ver }}:
-  file.managed:
-    - source: https://get.docker.com/builds/Linux/{{ cpuarch }}/docker-{{ override_docker_ver }}
-    - source_hash: md5=99dc4ac05606d79448ffe156a0765102
-    - user: root
-    - group: root
-    - mode: 644
-    - makedirs: true
+docker-install:
+  cmd.run:
+    - name: |
+        mkdir -p /var/cache/docker-install
+        curl -sSL https://get.docker.com/builds/Linux/{{ cpuarch }}/docker-{{ override_docker_ver }} -o /var/cache/docker-install/docker-{{ override_docker_ver }}
+        chmod +x /var/cache/docker-install/docker-{{ override_docker_ver }}
 
 {% set storage_base='https://storage.googleapis.com/kubernetes-release/docker/' %}
 # Drop the license file into /usr/share so that everything is crystal clear.
@@ -119,11 +117,8 @@ purge-old-docker-package:
     - makedirs: true
 
 docker-upgrade:
-  pkg.installed:
-    - sources:
-      - docker-{{ override_docker_ver }}: /var/cache/docker-install/docker-{{ override_docker_ver }}
-    - require:
-      - file: /var/cache/docker-install/docker-{{ override_docker_ver }}
+  cmd.run:
+    - name: mv /var/cache/docker-install/docker-{{ override_docker_ver }} /usr/bin/docker
 {% endif %} # end override_docker_ver != ''
 
 # Default docker systemd unit file doesn't use an EnvironmentFile; replace it with one that does.
@@ -170,13 +165,9 @@ docker:
     - watch:
       - file: {{ environment_file }}
 {% if override_docker_ver != '' %}
-      - pkg: docker-upgrade
+      - file: /usr/bin/docker
 {% endif %}
 {% if pillar.get('is_systemd') %}
       - file: {{ pillar.get('systemd_system_path') }}/docker.service
-{% endif %}
-{% if override_docker_ver != '' %}
-    - require:
-      - pkg: docker-upgrade
 {% endif %}
 {% endif %} # end grains.os_family != 'RedHat'
