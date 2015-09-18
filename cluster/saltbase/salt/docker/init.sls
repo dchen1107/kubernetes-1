@@ -82,22 +82,11 @@ net.ipv4.ip_forward:
 # variables are provided for other cloud providers, and for testing and dire circumstances, to allow
 # overriding the Docker version that's in a ContainerVM image.
 #
-# To change:
-#
-# 1. Find new deb name at:
-#    http://apt.dockerproject.org/repo/pool/main/d/docker-engine
-# 2. Download based on that:
-#    curl -O http://apt.dockerproject.org/repo/pool/main/d/docker-engine/<deb>
-# 3. Update override_deb, override_docker_ver with new deb name, and new version
-
-{% set storage_base='https://storage.googleapis.com/kubernetes-release/docker/' %}
-# Only upgrade Docker to 1.8.2 for the containerVM image.
 # TODO(dchen1107): For release 1.1, we want to update the ContainerVM image to
 # include Docker 1.8.2 and comment out the upgrade below.
-{% if grains.get('oscodename') != '' %}
-{% set docker_pkg_name='docker-engine' %}
-{% set override_deb='docker-engine_1.8.2-0~' + grains.oscodename+'_amd64.deb' %}
-{% set override_docker_ver='1.8.2-0' %}
+{% if grains.get('kernel') == 'Linux' %}
+{% set cpuarch=grains.cpuarch %}
+{% set override_docker_ver='1.8.2' %}
 {% endif %}
 
 {% if override_docker_ver != '' %}
@@ -109,15 +98,16 @@ purge-old-docker-package:
       - lxc-docker-1.7.1
 
 # Download from docker site
-/var/cache/docker-install/{{ override_deb }}:
+/var/cache/docker-install/docker-{{ override_docker_ver }}:
   file.managed:
-    - source: http://apt.dockerproject.org/repo/pool/main/d/docker-engine/{{ override_deb }}
-    - source_hash: md5=https://get.docker.com/builds/Linux/i386/docker-1.8.2.md5
+    - source: https://get.docker.com/builds/Linux/{{ cpuarch }}/docker-{{ override_docker_ver }}
+    - source_hash: md5=99dc4ac05606d79448ffe156a0765102
     - user: root
     - group: root
     - mode: 644
     - makedirs: true
 
+{% set storage_base='https://storage.googleapis.com/kubernetes-release/docker/' %}
 # Drop the license file into /usr/share so that everything is crystal clear.
 /usr/share/doc/docker/apache.txt:
   file.managed:
@@ -131,9 +121,9 @@ purge-old-docker-package:
 docker-upgrade:
   pkg.installed:
     - sources:
-      - {{ docker_pkg_name }}: /var/cache/docker-install/{{ override_deb }}
+      - docker-{{ override_docker_ver }}: /var/cache/docker-install/docker-{{ override_docker_ver }}
     - require:
-      - file: /var/cache/docker-install/{{ override_deb }}
+      - file: /var/cache/docker-install/docker-{{ override_docker_ver }}
 {% endif %} # end override_docker_ver != ''
 
 # Default docker systemd unit file doesn't use an EnvironmentFile; replace it with one that does.
