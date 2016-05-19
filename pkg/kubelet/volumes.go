@@ -196,9 +196,12 @@ func (kl *Kubelet) getPodVolumes(podUID types.UID) ([]*volumeTuple, error) {
 		if err != nil {
 			return []*volumeTuple{}, fmt.Errorf("could not read directory %s: %v", volumeKindPath, err)
 		}
+		glog.Infof("??????Pod %s:", podVolDir)
 		for i, volumeNameDir := range volumeNameDirs {
 			if volumeNameDir != nil {
-				volumes = append(volumes, &volumeTuple{Kind: volumeKind, Name: volumeNameDir.Name()})
+				var tuple = volumeTuple{Kind: volumeKind, Name: volumeNameDir.Name()}
+				volumes = append(volumes, &tuple)
+				glog.Infof("\t??????volumes %+v", tuple)
 			} else {
 				glog.Errorf("Could not read directory %s: %v", podVolDir, volumeNameDirsStat[i])
 			}
